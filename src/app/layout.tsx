@@ -2,19 +2,21 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Cesium in Next.js 14 with TypeScript",
-  description: "An example Next.js 14 TypeScript project displaying Cesium hosted in Vercel",
+  title: "GPS 4D collaboratif pour VTOL | PIE ENSTA | Groupe 31",
+  description: "Système de navigation 4D en temps réel pour aéronefs VTOL, développé par des étudiants de l’ENSTA Paris avec Cesium et Next.js.",
   openGraph: {
     type: "website",
-    siteName: "Cesium in Next.js 14 with TypeScript",
-    title: "Cesium in Next.js 14 with TypeScript",
-    url: `https://nextjs-cesium.vercel.app`,
-    description: "An example Next.js 14 TypeScript project displaying Cesium hosted in Vercel",
+    siteName: "GPS 4D VTOL - ENSTA",
+    title: "GPS 4D collaboratif pour VTOL | Projet étudiant ENSTA",
+    url: `https://vtol-gps.ensta.fr`,
+    description: "Plateforme collaborative de navigation 4D en temps réel pour appareils VTOL, intégrant CesiumJS et un flux de données en direct.",
     images: [{
-      url: `https://nextjs-cesium.vercel.app/og.png`
+      url: ``,
+      alt: "Interface du GPS 4D pour VTOL"
     }]
   }
 };
+
 
 export default function RootLayout({
   children,

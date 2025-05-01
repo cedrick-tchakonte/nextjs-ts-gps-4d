@@ -10,9 +10,20 @@ async function getPosition() {
   }
 }
 
+async function getWeather() {
+  return {
+    windSpeed: 15, // Exemple de vitesse du vent
+  };
+}
+
 export default async function MainPage() {
   const fetchedPosition = await getPosition();
+  const currentWeather = await getWeather();
+
   return (
-    <CesiumWrapper positions={[fetchedPosition.position]} />
-  )
+    <CesiumWrapper
+      positions={[fetchedPosition.position]}
+      currentWeather={currentWeather}
+    />
+  );
 }

@@ -10,9 +10,11 @@ const CesiumDynamicComponent = dynamic(() => import('./CesiumComponent'), {
 });
 
 export const CesiumWrapper:React.FunctionComponent<{
-    positions: Position[]
+    positions: Position[],
+    currentWeather: { windSpeed: number };
 }> = ({
-    positions
+    positions,
+    currentWeather
 }) => {
     const [CesiumJs, setCesiumJs] = React.useState<CesiumType | null>(null);
     
@@ -26,7 +28,7 @@ export const CesiumWrapper:React.FunctionComponent<{
     }, [CesiumJs]);
 
     return (
-        CesiumJs ? <CesiumDynamicComponent CesiumJs={CesiumJs} positions={positions} /> : null
+        CesiumJs ? <CesiumDynamicComponent CesiumJs={CesiumJs} positions={positions} currentWeather={currentWeather} /> : null
     )
 }
 
