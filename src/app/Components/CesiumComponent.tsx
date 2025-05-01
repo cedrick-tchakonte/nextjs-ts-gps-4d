@@ -139,7 +139,7 @@ export const CesiumComponent: React.FunctionComponent<{
 
             // Add real-time entity
             const entity = cesiumViewer.current.entities.add({
-                position: CesiumJs.Cartesian3.fromDegrees(2.430, 48.632, 100),
+                position: CesiumJs.Cartesian3.fromDegrees(2.430, 48.632, 200),
                 point: {
                     pixelSize: 20,
                     color: CesiumJs.Color.RED,

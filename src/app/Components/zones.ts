@@ -26,17 +26,6 @@ export const zones: { position: [number, number]; type: any; label: string }[] =
 
     // Cluster 1 : Zones d'atterrissage (LANDING)
     { position: [2.2205, 48.7135], type: ZONE_TYPES.LANDING, label: 'ENSTA - Zone Atterrissage 1' },
-    { position: [2.2215, 48.7145], type: ZONE_TYPES.LANDING, label: 'ENSTA - Zone Atterrissage 2' },
-    { position: [2.2225, 48.7155], type: ZONE_TYPES.LANDING, label: 'ENSTA - Zone Atterrissage 3' },
-    { position: [2.2235, 48.7165], type: ZONE_TYPES.LANDING, label: 'ENSTA - Zone Atterrissage 4' },
-    { position: [2.2245, 48.7175], type: ZONE_TYPES.LANDING, label: 'ENSTA - Zone Atterrissage 5' },
-
-    // Cluster 2 : Zones d'urgence (URGENCE)
-    { position: [2.2255, 48.7185], type: ZONE_TYPES.URGENCE, label: 'ENSTA - Parking Urgence 1' },
-    { position: [2.2265, 48.7195], type: ZONE_TYPES.URGENCE, label: 'ENSTA - Parking Urgence 2' },
-    { position: [2.2275, 48.7205], type: ZONE_TYPES.URGENCE, label: 'ENSTA - Parking Urgence 3' },
-    { position: [2.2285, 48.7215], type: ZONE_TYPES.URGENCE, label: 'ENSTA - Parking Urgence 4' },
-    { position: [2.2295, 48.7225], type: ZONE_TYPES.URGENCE, label: 'ENSTA - Parking Urgence 5' },
 
     // Ajout de 50 nouvelles zones dans un rayon de 10 km autour de l'ENSTA Paris
     { position: [2.2201, 48.7131], type: ZONE_TYPES.LANDING, label: 'ENSTA - Zone Atterrissage 7' },
@@ -215,14 +204,15 @@ export const zones: { position: [number, number]; type: any; label: string }[] =
     { position: [2.2140, 48.7140], type: ZONE_TYPES.CRASH, label: 'Polytechnique - Zone de Crash 1' },
     { position: [2.2150, 48.7150], type: ZONE_TYPES.CRASH, label: 'Polytechnique - Zone de Crash 2' },
 
-    // Réorganisation des zones autour de Polytechnique
-    { position: [2.2115, 48.7105], type: ZONE_TYPES.LANDING, label: 'Polytechnique - Zone Atterrissage Réorganisée 1' },
-    { position: [2.2125, 48.7115], type: ZONE_TYPES.LANDING, label: 'Polytechnique - Zone Atterrissage Réorganisée 2' },
-    { position: [2.2135, 48.7125], type: ZONE_TYPES.URGENCE, label: 'Polytechnique - Parking Urgence Réorganisé 1' },
-    { position: [2.2145, 48.7135], type: ZONE_TYPES.URGENCE, label: 'Polytechnique - Parking Urgence Réorganisé 2' },
-    { position: [2.2155, 48.7145], type: ZONE_TYPES.CRASH, label: 'Polytechnique - Zone de Crash Réorganisée 1' },
-    { position: [2.2165, 48.7155], type: ZONE_TYPES.CRASH, label: 'Polytechnique - Zone de Crash Réorganisée 2' },
-    { position: [2.2175, 48.7165], type: ZONE_TYPES.RELIGIEUX, label: 'Polytechnique - Site Religieux Réorganisé 1' },
-    { position: [2.2185, 48.7175], type: ZONE_TYPES.RELIGIEUX, label: 'Polytechnique - Site Religieux Réorganisé 2' },
-    { position: [2.2195, 48.7185], type: ZONE_TYPES.DEPOSE, label: 'Polytechnique - Dépose Minute Réorganisée 1' }
+    // Zones ajoutées pour Palaiseau
+    { position: [2.2430, 48.7160], type: ZONE_TYPES.LANDING, label: 'Palaiseau - Zone Atterrissage 1' },
+    { position: [2.2450, 48.7170], type: ZONE_TYPES.LANDING, label: 'Palaiseau - Zone Atterrissage 2' },
+    { position: [2.2470, 48.7180], type: ZONE_TYPES.URGENCE, label: 'Palaiseau - Parking Urgence 1' },
+    { position: [2.2490, 48.7190], type: ZONE_TYPES.URGENCE, label: 'Palaiseau - Parking Urgence 2' },
+    { position: [2.2510, 48.7200], type: ZONE_TYPES.CRASH, label: 'Palaiseau - Zone de Crash 1' },
+    { position: [2.2530, 48.7210], type: ZONE_TYPES.CRASH, label: 'Palaiseau - Zone de Crash 2' },
+    { position: [2.2550, 48.7220], type: ZONE_TYPES.RELIGIEUX, label: 'Palaiseau - Site Religieux 1' },
+    { position: [2.2570, 48.7230], type: ZONE_TYPES.RELIGIEUX, label: 'Palaiseau - Site Religieux 2' },
+    { position: [2.2590, 48.7240], type: ZONE_TYPES.DEPOSE, label: 'Palaiseau - Dépose Minute 1' },
+    { position: [2.2610, 48.7250], type: ZONE_TYPES.DEPOSE, label: 'Palaiseau - Dépose Minute 2' },
 ];
