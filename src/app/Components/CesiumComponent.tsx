@@ -343,6 +343,33 @@ export const CesiumComponent: React.FunctionComponent<{
         controlsContainer.style.flexDirection = 'column';
         controlsContainer.style.gap = '8px';
         
+        // Bouton pour pause/play
+        const playPauseButton = document.createElement('button');
+        playPauseButton.textContent = simulationControls.isPlaying ? 'Pause' : 'Play';
+        playPauseButton.style.padding = '8px';
+        playPauseButton.style.backgroundColor = simulationControls.isPlaying ? '#FF9800' : '#4CAF50';
+        playPauseButton.style.color = 'white';
+        playPauseButton.style.border = 'none';
+        playPauseButton.style.borderRadius = '4px';
+        playPauseButton.style.cursor = 'pointer';
+        playPauseButton.style.fontWeight = 'bold';
+        
+        playPauseButton.addEventListener('click', () => {
+            const newIsPlaying = !simulationControls.isPlaying;
+            setSimulationControls(prev => ({ ...prev, isPlaying: newIsPlaying }));
+            
+            if (webSocket && webSocket.readyState === WebSocket.OPEN) {
+                webSocket.send(JSON.stringify({
+                    type: 'simulationControl',
+                    action: newIsPlaying ? 'play' : 'pause'
+                }));
+            }
+            
+            // Mettre à jour l'interface immédiatement
+            playPauseButton.textContent = newIsPlaying ? 'Pause' : 'Play';
+            playPauseButton.style.backgroundColor = newIsPlaying ? '#FF9800' : '#4CAF50';
+        });
+        
         // Bouton pour réinitialiser la simulation
         const resetButton = document.createElement('button');
         resetButton.textContent = 'Réinitialiser la simulation';
@@ -360,6 +387,9 @@ export const CesiumComponent: React.FunctionComponent<{
                 addCameraFollowButton(); // Mettre à jour le bouton de suivi
             }
             
+            // S'assurer que la simulation est en mode lecture après réinitialisation
+            setSimulationControls(prev => ({ ...prev, isPlaying: true }));
+            
             // Réinitialiser les contrôles de navigation et la caméra
             resetCamera();
             
@@ -370,6 +400,10 @@ export const CesiumComponent: React.FunctionComponent<{
                     action: 'reset'
                 }));
             }
+            
+            // Mettre à jour l'interface
+            playPauseButton.textContent = 'Pause';
+            playPauseButton.style.backgroundColor = '#FF9800';
         });
         
         // Contrôle de vitesse
@@ -387,10 +421,10 @@ export const CesiumComponent: React.FunctionComponent<{
         speedSlider.min = '0.5';
         speedSlider.max = '5';
         speedSlider.step = '0.5';
-        speedSlider.value = '1';
+        speedSlider.value = simulationControls.speed.toString();
         
         const speedValue = document.createElement('span');
-        speedValue.textContent = '1x';
+        speedValue.textContent = simulationControls.speed + 'x';
         speedValue.style.color = 'white';
         
         speedSlider.addEventListener('input', (e) => {
@@ -413,11 +447,12 @@ export const CesiumComponent: React.FunctionComponent<{
         speedContainer.appendChild(speedSlider);
         speedContainer.appendChild(speedValue);
         
+        controlsContainer.appendChild(playPauseButton);
         controlsContainer.appendChild(resetButton);
         controlsContainer.appendChild(speedContainer);
         
         cesiumContainerRef.current.appendChild(controlsContainer);
-    }, [webSocket, cameraFollowMode, resetCamera, addCameraFollowButton]);
+    }, [webSocket, cameraFollowMode, resetCamera, addCameraFollowButton, simulationControls]);
 
     // Gestion du plan de vol créé
     const handleFlightPlanCreated = React.useCallback((plan: FlightPlan) => {
@@ -463,32 +498,68 @@ export const CesiumComponent: React.FunctionComponent<{
                 });
             });
 
-            // Ajouter l'entité en temps réel avec une meilleure visibilité
+            // Ajouter l'entité en temps réel avec un modèle 3D de drone
             const entity = cesiumViewer.current.entities.add({
                 position: CesiumJs.Cartesian3.fromDegrees(2.430, 48.632, 200),
-                point: {
-                    pixelSize: 24, // Augmenter pour meilleure visibilité
-                    color: CesiumJs.Color.YELLOW,
-                    outlineColor: CesiumJs.Color.BLACK,
-                    outlineWidth: 2,
-                },
-                billboard: {
-                    image: 'https://cesium.com/docs/tutorials/creating-entities/images/NavigationIcon.png',
-                    scale: 0.5,
+                orientation: new CesiumJs.VelocityOrientationProperty(
+                    new CesiumJs.SampledPositionProperty()
+                ),
+                model: {
+                    uri: 'https://raw.githubusercontent.com/CesiumGS/cesium/main/Apps/SampleData/models/CesiumDrone/CesiumDrone.glb',
+                    minimumPixelSize: 128, // Augmenté pour meilleure visibilité (était 64)
+                    maximumScale: 2.0, // Augmenté (était 1.0)
+                    silhouetteColor: CesiumJs.Color.CYAN, // Changé pour un contour plus visible
+                    silhouetteSize: 3.0, // Plus épais (était 2.0)
+                    scale: 10.0,  // Taille augmentée (était 6.0)
                     heightReference: CesiumJs.HeightReference.RELATIVE_TO_GROUND,
+                    runAnimations: true,
+                    nodeTransformations: {
+                        // Configurations supplémentaires pour animer le drone
+                        Propeller: new CesiumJs.TranslationRotationScale(
+                            new CesiumJs.Cartesian3(0, 0, 0),    // translation
+                            CesiumJs.Quaternion.fromAxisAngle(   // rotation
+                                CesiumJs.Cartesian3.UNIT_X,
+                                CesiumJs.Math.toRadians(0)
+                            ),
+                            new CesiumJs.Cartesian3(1, 1, 1)     // scale
+                        )
+                    }
                 },
                 label: {
-                    text: 'Position Actuelle',
-                    font: '16px sans-serif',
+                    text: 'Drone GPS-4D',
+                    font: '18px sans-serif', // Police plus grande (était 16px)
                     style: CesiumJs.LabelStyle.FILL_AND_OUTLINE,
                     fillColor: CesiumJs.Color.WHITE,
-                    outlineWidth: 2,
+                    outlineWidth: 3, // Plus épais (était 2)
                     outlineColor: CesiumJs.Color.BLACK,
-                    pixelOffset: new CesiumJs.Cartesian2(0, -45),
+                    pixelOffset: new CesiumJs.Cartesian2(0, -100), // Déplacé plus bas (était -80)
                     showBackground: true,
-                    backgroundColor: CesiumJs.Color.BLACK.withAlpha(0.5),
-                    disableDepthTestDistance: Number.POSITIVE_INFINITY // Toujours visible
+                    backgroundColor: CesiumJs.Color.DARKBLUE.withAlpha(0.7), // Changé (était BLACK)
+                    disableDepthTestDistance: Number.POSITIVE_INFINITY,
+                    eyeOffset: new CesiumJs.Cartesian3(0, 0, 10)
                 },
+                // Propriété pour gérer l'orientation en fonction de la direction du mouvement
+                viewFrom: new CesiumJs.Cartesian3(-30, 0, 20),
+                // Ajouter un halo lumineux autour du drone pour une meilleure visibilité
+                ellipsoid: {
+                    radii: new CesiumJs.Cartesian3(15, 15, 15),
+                    material: new CesiumJs.PolylineGlowMaterialProperty({
+                        glowPower: 0.15,
+                        color: CesiumJs.Color.AQUA.withAlpha(0.3)
+                    }),
+                    outline: true,
+                    outlineColor: CesiumJs.Color.CYAN.withAlpha(0.8)
+                },
+                path: {
+                    show: true,
+                    leadTime: 0,
+                    trailTime: 120, // Plus long pour voir l'historique (était 60)
+                    width: 5, // Plus large (était 3)
+                    material: new CesiumJs.PolylineGlowMaterialProperty({
+                        glowPower: 0.2, // Plus intense (était 0.1)
+                        color: CesiumJs.Color.AQUA // Changé (était CYAN)
+                    })
+                }
             });
             setRealTimeEntity(entity);
 
@@ -514,24 +585,123 @@ export const CesiumComponent: React.FunctionComponent<{
             const position = CesiumJs.Cartesian3.fromDegrees(data.longitude, data.latitude, data.altitude);
 
             if (realTimeEntity) {
+                // Mettre à jour la position
                 realTimeEntity.position = new CesiumJs.ConstantPositionProperty(position);
+                
+                // Utiliser les nouvelles données d'orientation (yaw, pitch, roll) pour des mouvements plus réalistes
+                if (data.yaw !== undefined && data.pitch !== undefined && data.roll !== undefined) {
+                    // Créer une orientation en fonction des angles reçus
+                    const heading = CesiumJs.Math.toRadians(data.yaw);
+                    const pitch = CesiumJs.Math.toRadians(data.pitch);
+                    const roll = CesiumJs.Math.toRadians(data.roll);
+                    
+                    const orientation = CesiumJs.Transforms.headingPitchRollQuaternion(
+                        position,
+                        new CesiumJs.HeadingPitchRoll(heading, pitch, roll)
+                    );
+                    
+                    realTimeEntity.orientation = new CesiumJs.ConstantProperty(orientation);
+                } else {
+                    // Calculer l'orientation du drone en fonction de son déplacement (méthode de secours)
+                    // Récupérer l'heure actuelle pour les propriétés temporelles
+                    const currentTime = cesiumViewer.current?.clock.currentTime || CesiumJs.JulianDate.now();
+                    
+                    // Mettre à jour l'orientation du modèle en fonction de la direction du mouvement
+                    if (cesiumViewer.current && position) {
+                        // Créer une propriété de position échantillonnée pour permettre l'orientation basée sur la vélocité
+                        const sampledPosition = new CesiumJs.SampledPositionProperty();
+                        sampledPosition.addSample(currentTime, position);
+                        
+                        // Utiliser une propriété d'orientation basée sur la vélocité pour orienter automatiquement le drone
+                        const velocityOrientation = new CesiumJs.VelocityOrientationProperty(sampledPosition);
+                        realTimeEntity.orientation = velocityOrientation;
+                    }
+                }
+                
+                // Ajouter des effets visuels en fonction de la turbulence
+                if (data.turbulence !== undefined && realTimeEntity.ellipsoid) {
+                    // Ajuster la taille du halo en fonction de la turbulence
+                    const turbulenceFactor = Math.max(1, data.turbulence); 
+                    // Utiliser un type plus général pour éviter les erreurs de namespace
+                    const ellipsoidGraphics = realTimeEntity.ellipsoid;
+                    
+                    // Mettre à jour les radii de l'ellipsoïde
+                    const baseSize = 15;
+                    const newRadii = new CesiumJs.Cartesian3(
+                        baseSize * turbulenceFactor,
+                        baseSize * turbulenceFactor,
+                        baseSize * turbulenceFactor
+                    );
+                    
+                    ellipsoidGraphics.radii = new CesiumJs.ConstantProperty(newRadii);
+                    
+                    // Changer la couleur en fonction de la turbulence
+                    const colorIntensity = Math.min(1, data.turbulence / 5);
+                    const haloColor = CesiumJs.Color.fromAlpha(
+                        CesiumJs.Color.lerp(
+                            CesiumJs.Color.AQUA, 
+                            CesiumJs.Color.RED, 
+                            colorIntensity, 
+                            new CesiumJs.Color()
+                        ),
+                        0.3 + (colorIntensity * 0.2)
+                    );
+                    
+                    // Appliquer une nouvelle couleur au matériau 
+                    // Sans accéder directement à la propriété color qui peut ne pas exister
+                    if (ellipsoidGraphics.material) {
+                        // Recréer un nouveau matériau complètement pour éviter les problèmes de type
+                        ellipsoidGraphics.material = new CesiumJs.PolylineGlowMaterialProperty({
+                            glowPower: 0.15,
+                            color: haloColor
+                        });
+                    }
+                }
+                
+                // Mettre à jour le chemin parcouru
+                if (realTimeEntity.path) {
+                    // Utiliser la ConstantProperty pour définir la propriété show
+                    realTimeEntity.path.show = new CesiumJs.ConstantProperty(true);
+                }
                 
                 // Si le mode de suivi de caméra est activé, déplacer la caméra avec l'entité
                 if (cameraFollowMode && cesiumViewer.current) {
-                    // Au lieu d'utiliser flyTo qui bloque le contrôle utilisateur pendant l'animation,
-                    // utiliser setView qui fait un déplacement instantané sans animation
+                    // Ajuster la position de la caméra en fonction de l'orientation du drone
+                    // pour un suivi plus naturel
                     cesiumViewer.current.camera.setView({
                         destination: CesiumJs.Cartesian3.fromDegrees(
                             data.longitude, 
                             data.latitude, 
-                            data.altitude + 300 // Hauteur de la caméra au-dessus de l'entité
+                            data.altitude + 100 // Hauteur adaptée au drone
                         ),
                         orientation: {
                             heading: cesiumViewer.current.camera.heading,
-                            pitch: CesiumJs.Math.toRadians(-45),
+                            pitch: CesiumJs.Math.toRadians(-30), // Vue légèrement plus rasante
                             roll: 0.0
                         }
                     });
+                }
+                
+                // Mettre à jour l'interface avec des informations sur le vol
+                if (data.flightMode && data.totalWaypoints) {
+                    const progressInfo = document.querySelector('.flight-progress-info');
+                    if (progressInfo) {
+                        progressInfo.textContent = `Waypoint: ${data.waypointIndex + 1}/${data.totalWaypoints}`;
+                    } else if (cesiumContainerRef.current && data.totalWaypoints > 0) {
+                        // Créer un élément pour afficher la progression
+                        const infoElement = document.createElement('div');
+                        infoElement.className = 'flight-progress-info';
+                        infoElement.style.position = 'absolute';
+                        infoElement.style.top = '20px';
+                        infoElement.style.left = '20px';
+                        infoElement.style.backgroundColor = 'rgba(0,0,0,0.7)';
+                        infoElement.style.color = 'white';
+                        infoElement.style.padding = '10px';
+                        infoElement.style.borderRadius = '4px';
+                        infoElement.style.zIndex = '1000';
+                        infoElement.textContent = `Waypoint: ${data.waypointIndex + 1}/${data.totalWaypoints}`;
+                        cesiumContainerRef.current.appendChild(infoElement);
+                    }
                 }
             }
         };
