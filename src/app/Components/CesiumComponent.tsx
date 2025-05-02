@@ -26,7 +26,7 @@ export const CesiumComponent: React.FunctionComponent<{
     const addedScenePrimitives = React.useRef<Cesium3DTileset[]>([]);
     const [isLoaded, setIsLoaded] = React.useState(false);
     const [realTimeEntity, setRealTimeEntity] = React.useState<Entity | null>(null);
-    const [cameraFollowMode, setCameraFollowMode] = React.useState(true);
+    const [cameraFollowMode, setCameraFollowMode] = React.useState(false); // Désactiver le suivi automatique par défaut
     const [webSocket, setWebSocket] = React.useState<WebSocket | null>(null);
     const [currentFlightPlan, setCurrentFlightPlan] = React.useState<FlightPlan | null>(null);
     const [flightPathEntities, setFlightPathEntities] = React.useState<Entity[]>([]);
@@ -39,12 +39,21 @@ export const CesiumComponent: React.FunctionComponent<{
         // Set the initial camera to look at a default location
         if (cesiumViewer.current !== null) {
             cesiumViewer.current.scene.camera.setView({
-                destination: CesiumJs.Cartesian3.fromDegrees(2.2147, 48.7108, 500),
+                destination: CesiumJs.Cartesian3.fromDegrees(2.2147, 48.7108, 2000), // Augmenter l'altitude pour une vue plus large
                 orientation: {
-                  heading: CesiumJs.Math.toRadians(10),
+                  heading: CesiumJs.Math.toRadians(0), // Vue orientée vers le nord
                   pitch: CesiumJs.Math.toRadians(-45),
                 },
               });
+              
+            // Activer les contrôles de navigation pour permettre à l'utilisateur de se déplacer librement
+            if (cesiumViewer.current.scene) {
+                cesiumViewer.current.scene.screenSpaceCameraController.enableRotate = true;
+                cesiumViewer.current.scene.screenSpaceCameraController.enableTranslate = true;
+                cesiumViewer.current.scene.screenSpaceCameraController.enableZoom = true;
+                cesiumViewer.current.scene.screenSpaceCameraController.enableTilt = true;
+                cesiumViewer.current.scene.screenSpaceCameraController.enableLook = true;
+            }
         }
     }, [CesiumJs]);
 
@@ -272,15 +281,44 @@ export const CesiumComponent: React.FunctionComponent<{
         }
     }, [webSocket]);
 
-    // Gestion du plan de vol créé
-    const handleFlightPlanCreated = React.useCallback((plan: FlightPlan) => {
-        setCurrentFlightPlan(plan);
-        visualizeFlightPath(plan);
-        sendFlightPlanToServer(plan);
+    const toggleCameraFollowMode = React.useCallback(() => {
+        setCameraFollowMode(!cameraFollowMode);
+    }, [cameraFollowMode]);
+
+    // Fonction pour ajouter un contrôle de suivi à l'interface
+    const addCameraFollowButton = React.useCallback(() => {
+        if (!cesiumViewer.current || !cesiumContainerRef.current) return;
         
-        // Ajouter un bouton de contrôle pour réinitialiser la simulation
-        addSimulationControls();
-    }, [visualizeFlightPath, sendFlightPlanToServer]);
+        // Supprimer le bouton existant s'il existe
+        const existingButton = document.querySelector('.camera-follow-button');
+        if (existingButton) {
+            existingButton.remove();
+        }
+        
+        const buttonContainer = document.createElement('div');
+        buttonContainer.className = 'camera-follow-button';
+        buttonContainer.style.position = 'absolute';
+        buttonContainer.style.bottom = '30px';
+        buttonContainer.style.right = '30px';
+        buttonContainer.style.zIndex = '1000';
+        
+        const button = document.createElement('button');
+        button.textContent = cameraFollowMode ? 'Désactiver Suivi' : 'Suivre la position';
+        button.style.padding = '10px';
+        button.style.backgroundColor = cameraFollowMode ? '#f44336' : '#4CAF50';
+        button.style.color = 'white';
+        button.style.border = 'none';
+        button.style.borderRadius = '4px';
+        button.style.cursor = 'pointer';
+        button.style.fontWeight = 'bold';
+        
+        button.addEventListener('click', () => {
+            toggleCameraFollowMode();
+        });
+        
+        buttonContainer.appendChild(button);
+        cesiumContainerRef.current.appendChild(buttonContainer);
+    }, [cameraFollowMode, toggleCameraFollowMode]);
 
     // Ajouter les contrôles de simulation
     const addSimulationControls = React.useCallback(() => {
@@ -316,6 +354,16 @@ export const CesiumComponent: React.FunctionComponent<{
         resetButton.style.cursor = 'pointer';
         
         resetButton.addEventListener('click', () => {
+            // Réinitialiser l'état local avant d'envoyer le message au serveur
+            if (cameraFollowMode) {
+                setCameraFollowMode(false);
+                addCameraFollowButton(); // Mettre à jour le bouton de suivi
+            }
+            
+            // Réinitialiser les contrôles de navigation et la caméra
+            resetCamera();
+            
+            // Informer le serveur de la réinitialisation
             if (webSocket && webSocket.readyState === WebSocket.OPEN) {
                 webSocket.send(JSON.stringify({
                     type: 'simulationControl',
@@ -369,41 +417,17 @@ export const CesiumComponent: React.FunctionComponent<{
         controlsContainer.appendChild(speedContainer);
         
         cesiumContainerRef.current.appendChild(controlsContainer);
-    }, [webSocket]);
+    }, [webSocket, cameraFollowMode, resetCamera, addCameraFollowButton]);
 
-    const toggleCameraFollowMode = React.useCallback(() => {
-        setCameraFollowMode(!cameraFollowMode);
-    }, [cameraFollowMode]);
-
-    // Fonction pour ajouter un contrôle de suivi à l'interface
-    const addCameraFollowButton = React.useCallback(() => {
-        if (!cesiumViewer.current || !cesiumContainerRef.current) return;
+    // Gestion du plan de vol créé
+    const handleFlightPlanCreated = React.useCallback((plan: FlightPlan) => {
+        setCurrentFlightPlan(plan);
+        visualizeFlightPath(plan);
+        sendFlightPlanToServer(plan);
         
-        const buttonContainer = document.createElement('div');
-        buttonContainer.className = 'camera-follow-button';
-        buttonContainer.style.position = 'absolute';
-        buttonContainer.style.bottom = '30px';
-        buttonContainer.style.right = '30px';
-        buttonContainer.style.zIndex = '1000';
-        
-        const button = document.createElement('button');
-        button.textContent = 'Suivre la position';
-        button.style.padding = '10px';
-        button.style.backgroundColor = cameraFollowMode ? '#4CAF50' : '#f1f1f1';
-        button.style.color = cameraFollowMode ? 'white' : 'black';
-        button.style.border = 'none';
-        button.style.borderRadius = '4px';
-        button.style.cursor = 'pointer';
-        
-        button.addEventListener('click', () => {
-            toggleCameraFollowMode();
-            button.style.backgroundColor = !cameraFollowMode ? '#4CAF50' : '#f1f1f1';
-            button.style.color = !cameraFollowMode ? 'white' : 'black';
-        });
-        
-        buttonContainer.appendChild(button);
-        cesiumContainerRef.current.appendChild(buttonContainer);
-    }, [cameraFollowMode, toggleCameraFollowMode]);
+        // Ajouter un bouton de contrôle pour réinitialiser la simulation
+        addSimulationControls();
+    }, [visualizeFlightPath, sendFlightPlanToServer, addSimulationControls]);
 
     const initializeCesiumJs = React.useCallback(async () => {
         if (cesiumViewer.current !== null) {
@@ -494,7 +518,9 @@ export const CesiumComponent: React.FunctionComponent<{
                 
                 // Si le mode de suivi de caméra est activé, déplacer la caméra avec l'entité
                 if (cameraFollowMode && cesiumViewer.current) {
-                    cesiumViewer.current.camera.flyTo({
+                    // Au lieu d'utiliser flyTo qui bloque le contrôle utilisateur pendant l'animation,
+                    // utiliser setView qui fait un déplacement instantané sans animation
+                    cesiumViewer.current.camera.setView({
                         destination: CesiumJs.Cartesian3.fromDegrees(
                             data.longitude, 
                             data.latitude, 
@@ -504,8 +530,7 @@ export const CesiumComponent: React.FunctionComponent<{
                             heading: cesiumViewer.current.camera.heading,
                             pitch: CesiumJs.Math.toRadians(-45),
                             roll: 0.0
-                        },
-                        duration: 0.5 // Transition douce mais rapide
+                        }
                     });
                 }
             }
