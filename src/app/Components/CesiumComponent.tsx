@@ -78,6 +78,14 @@ export const CesiumComponent: React.FunctionComponent<{
         setFlightPathEntities([]);
     }, [flightPathEntities]);
 
+    // Fonction pour nettoyer l'entité du drone en temps réel
+    const cleanUpRealTimeEntity = React.useCallback(() => {
+        if (cesiumViewer.current && realTimeEntity) {
+            cesiumViewer.current.entities.remove(realTimeEntity);
+            setRealTimeEntity(null);
+        }
+    }, [realTimeEntity]);
+
     const addZones = React.useCallback((zones: { position: [number, number], type: any, label: string }[]) => {
         if (cesiumViewer.current) {
             zones.forEach(zone => {
