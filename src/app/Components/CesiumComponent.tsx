@@ -480,6 +480,9 @@ export const CesiumComponent: React.FunctionComponent<{
             
             // Nettoyer les primitives potentiellement existantes
             cleanUpPrimitives();
+            
+            // Nettoyer l'entité drone en temps réel s'il en existe déjà une
+            cleanUpRealTimeEntity();
 
             // Ajouter le tileset et le suivre pour le nettoyage en cas de re-rendu
             const osmBuildingsTilesetPrimitive = cesiumViewer.current.scene.primitives.add(osmBuildingsTileset);
@@ -515,7 +518,7 @@ export const CesiumComponent: React.FunctionComponent<{
                 model: {
                     uri: 'https://raw.githubusercontent.com/CesiumGS/cesium/main/Apps/SampleData/models/CesiumDrone/CesiumDrone.glb',
                     minimumPixelSize: 128, // Augmenté pour meilleure visibilité (était 64)
-                    maximumScale: 2.0, // Augmenté (était 1.0)
+                    maximumScale: 3.0, // Augmenté (était 1.0)
                     silhouetteColor: CesiumJs.Color.CYAN, // Changé pour un contour plus visible
                     silhouetteSize: 3.0, // Plus épais (était 2.0)
                     scale: 10.0,  // Taille augmentée (était 6.0)
@@ -579,7 +582,7 @@ export const CesiumComponent: React.FunctionComponent<{
 
             setIsLoaded(true);
         }
-    }, [positions, addZones, cleanUpPrimitives, resetCamera, addCameraFollowButton, CesiumJs]);
+    }, [positions, addZones, cleanUpPrimitives, resetCamera, addCameraFollowButton, CesiumJs, cleanUpRealTimeEntity]);
 
     React.useEffect(() => {
         if (!isLoaded) return;

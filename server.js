@@ -13,7 +13,7 @@ let maxAltitude = 500;
 // Données pour la trajectoire planifiée
 let waypoints = [];
 let currentWaypointIndex = 0;
-let flightMode = 'default'; // 'default', 'planned'
+let flightMode = 'planned'; // Changé de 'default' à 'planned' pour suivre la trajectoire planifiée
 let simulationSpeed = 1;
 let minAltitude = 100;
 let isSimulationPaused = false; // Nouvel état pour gérer la pause
