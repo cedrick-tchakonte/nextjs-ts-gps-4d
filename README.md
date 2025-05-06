@@ -26,9 +26,3 @@ On NextJS 13.4+ React Strict-Mode is enabled by default. In `CesiumComponent.tsx
 
 #### TypeScript shenanigans with Cesium.js
 With all the work above, it is very important to utilize the dynamically called Cesium and not import individual functions like you would normally. Also it is very important to type Cesium specific  things with `import type { xyz } from 'cesium'` not `import { xyz } from 'cesium'`
-
-### I hope this helps you save some time... Cesium is a PITA to get started.
-
-### Credits
-Thank you https://github.com/willwill96 for helping me get started
-and please give this repo a star if it was helpful!
