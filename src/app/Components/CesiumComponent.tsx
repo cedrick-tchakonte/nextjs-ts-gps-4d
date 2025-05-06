@@ -1,6 +1,6 @@
 'use client'
 
-import React from 'react'
+import React, { useState } from 'react'
 import type { CesiumType } from '../types/cesium'
 import { Cesium3DTileset, type Entity, type Viewer } from 'cesium';
 import type { Position } from '../types/position';
@@ -11,6 +11,23 @@ import 'cesium/Build/Cesium/Widgets/widgets.css';
 import HUD from './HUD';
 import { zones } from './zones';
 import FlightPlanner, { FlightPlan, OptimizationType } from './FlightPlanner';
+// Ajouter cette importation aux importations existantes
+import { NoFlyZone } from '../utils/navigationAlgorithms';
+// Ajouter les imports pour les nouvelles fonctionnalités
+import { 
+    Building, 
+    RoadSegment, 
+    MissionType, 
+    findOptimalPath,
+    convertBuildingsToObstacles,
+    generateAltitudeProfile
+} from '../utils/navigationAlgorithms';
+import { 
+    extractBuildingsFromCesium, 
+    sampleBuildingHeightsFromCesium, 
+    extractRoadsFromCesium,
+    generateSimplifiedRoadGrid
+} from '../utils/cesiumDataExtractor';
 
 export const CesiumComponent: React.FunctionComponent<{
     CesiumJs: CesiumType,
@@ -34,6 +51,12 @@ export const CesiumComponent: React.FunctionComponent<{
         isPlaying: true,
         speed: 1
     });
+    // État pour stocker les obstacles visualisés
+    const [obstacleEntities, setObstacleEntities] = useState<Entity[]>([]);
+    // États pour stocker les bâtiments et les routes
+    const [buildings, setBuildings] = useState<Building[]>([]);
+    const [roads, setRoads] = useState<RoadSegment[]>([]);
+    const [missionType, setMissionType] = useState<MissionType>(MissionType.NORMAL);
 
     const resetCamera = React.useCallback(async () => {
         // Set the initial camera to look at a default location
@@ -289,6 +312,72 @@ export const CesiumComponent: React.FunctionComponent<{
         }
     }, [webSocket]);
 
+    // Fonction pour visualiser les obstacles (no-fly zones)
+    const visualizeObstacles = React.useCallback((obstacles: NoFlyZone[]) => {
+        if (!cesiumViewer.current) return;
+        
+        // D'abord nettoyer les entités d'obstacles précédentes
+        obstacleEntities.forEach((entity: Entity) => {
+            cesiumViewer.current?.entities.remove(entity);
+        });
+        
+        const newEntities: Entity[] = [];
+        
+        obstacles.forEach(obstacle => {
+            // Créer les positions pour le polygone
+            const positions = obstacle.coordinates.map(coord => 
+                CesiumJs.Cartesian3.fromDegrees(coord.lng, coord.lat)
+            );
+            
+            // Déterminer la couleur en fonction du type d'obstacle
+            let color;
+            switch(obstacle.type) {
+                case 'complete':
+                    color = CesiumJs.Color.RED.withAlpha(0.5);
+                    break;
+                case 'temporary':
+                    color = CesiumJs.Color.ORANGE.withAlpha(0.5);
+                    break;
+                case 'conditional':
+                    color = CesiumJs.Color.YELLOW.withAlpha(0.5);
+                    break;
+                default:
+                    color = CesiumJs.Color.RED.withAlpha(0.5);
+            }
+            
+            // Créer une entité pour le polygone
+            if (cesiumViewer.current) {
+                const entity = cesiumViewer.current.entities.add({
+                    polygon: {
+                        hierarchy: new CesiumJs.PolygonHierarchy(positions),
+                        material: color,
+                        outline: true,
+                        outlineColor: CesiumJs.Color.BLACK,
+                        outlineWidth: 2,
+                        height: obstacle.minAltitude || 0,
+                        extrudedHeight: obstacle.maxAltitude || 500
+                    },
+                    label: {
+                        text: `Zone Restreinte: ${obstacle.reason || obstacle.id}`,
+                        font: '14px sans-serif',
+                        style: CesiumJs.LabelStyle.FILL_AND_OUTLINE,
+                        fillColor: CesiumJs.Color.WHITE,
+                        outlineWidth: 2,
+                        outlineColor: CesiumJs.Color.BLACK,
+                        pixelOffset: new CesiumJs.Cartesian2(0, -30),
+                        showBackground: true,
+                        backgroundColor: color,
+                        disableDepthTestDistance: Number.POSITIVE_INFINITY
+                    }
+                });
+                
+                newEntities.push(entity);
+            }
+        });
+        
+        setObstacleEntities(newEntities);
+    }, [CesiumJs, obstacleEntities]);
+    
     const toggleCameraFollowMode = React.useCallback(() => {
         setCameraFollowMode(!cameraFollowMode);
     }, [cameraFollowMode]);
@@ -462,15 +551,271 @@ export const CesiumComponent: React.FunctionComponent<{
         cesiumContainerRef.current.appendChild(controlsContainer);
     }, [webSocket, cameraFollowMode, resetCamera, addCameraFollowButton, simulationControls]);
 
-    // Gestion du plan de vol créé
+    // Fonction pour visualiser les bâtiments et les routes
+    const visualizeBuildingsAndRoads = React.useCallback(async (
+        buildings: Building[],
+        roads: RoadSegment[]
+    ) => {
+        if (!cesiumViewer.current) return;
+        
+        // Visualiser les bâtiments
+        buildings.forEach((building, index) => {
+            // Créer les positions pour le polygone du bâtiment
+            const positions = building.footprint.map(coord => 
+                CesiumJs.Cartesian3.fromDegrees(coord.lng, coord.lat)
+            );
+            
+            // Créer une entité pour le bâtiment
+            cesiumViewer.current?.entities.add({
+                name: `Building-${index}`,
+                polygon: {
+                    hierarchy: new CesiumJs.PolygonHierarchy(positions),
+                    material: CesiumJs.Color.DARKGRAY.withAlpha(0.7),
+                    outline: true,
+                    outlineColor: CesiumJs.Color.BLACK,
+                    outlineWidth: 1,
+                    height: 0,
+                    extrudedHeight: building.height // Hauteur du bâtiment
+                }
+            });
+        });
+        
+        // Visualiser les routes
+        roads.forEach((road, index) => {
+            const positions = road.path.map(coord => 
+                CesiumJs.Cartesian3.fromDegrees(coord.lng, coord.lat, 1) // Léger décalage en hauteur
+            );
+            
+            // Déterminer le style de la route selon son type
+            let color;
+            let width;
+            
+            switch(road.type) {
+                case 'highway':
+                    color = CesiumJs.Color.DODGERBLUE;
+                    width = road.width || 10;
+                    break;
+                case 'primary':
+                    color = CesiumJs.Color.DEEPSKYBLUE;
+                    width = road.width || 8;
+                    break;
+                case 'secondary':
+                    color = CesiumJs.Color.LIGHTSKYBLUE;
+                    width = road.width || 6;
+                    break;
+                case 'residential':
+                    color = CesiumJs.Color.LIGHTSTEELBLUE;
+                    width = road.width || 4;
+                    break;
+                default:
+                    color = CesiumJs.Color.LIGHTGRAY;
+                    width = road.width || 3;
+            }
+            
+            // Créer une entité pour la route
+            cesiumViewer.current?.entities.add({
+                name: `Road-${index}`,
+                polyline: {
+                    positions: positions,
+                    width: width,
+                    material: color.withAlpha(0.7),
+                    clampToGround: true
+                }
+            });
+        });
+    }, [CesiumJs]);
+
+    // Fonctions pour extraire et stocker les bâtiments et routes
+    const loadBuildingsAndRoads = React.useCallback(async (bounds: { 
+        minLat: number, maxLat: number, minLng: number, maxLng: number 
+    }) => {
+        if (!cesiumViewer.current) return;
+        
+        try {
+            // Essayer d'extraire les bâtiments réels de Cesium
+            const extractedBuildings = await sampleBuildingHeightsFromCesium(
+                cesiumViewer.current,
+                bounds,
+                0.002 // Résolution d'échantillonnage
+            );
+            
+            if (extractedBuildings.length > 0) {
+                setBuildings(extractedBuildings);
+                console.log(`Extracted ${extractedBuildings.length} buildings`);
+            } else {
+                // Si l'extraction a échoué, créer des bâtiments simplifiés
+                console.log('Creating simplified buildings');
+                const simplifiedBuildings: Building[] = [];
+                
+                // Créer quelques bâtiments simplifiés dans la zone
+                for (let i = 0; i < 10; i++) {
+                    const lat = bounds.minLat + Math.random() * (bounds.maxLat - bounds.minLat);
+                    const lng = bounds.minLng + Math.random() * (bounds.maxLng - bounds.minLng);
+                    
+                    // Taille du footprint et hauteur du bâtiment
+                    const size = 0.0005 + Math.random() * 0.001;
+                    const height = 20 + Math.random() * 100;
+                    
+                    // Créer un périmètre approximatif (carré)
+                    const footprint = [
+                        { lat: lat - size, lng: lng - size },
+                        { lat: lat - size, lng: lng + size },
+                        { lat: lat + size, lng: lng + size },
+                        { lat: lat + size, lng: lng - size }
+                    ];
+                    
+                    simplifiedBuildings.push({
+                        id: `building-${i}`,
+                        position: { lat, lng },
+                        height,
+                        footprint,
+                        type: 'generated'
+                    });
+                }
+                
+                setBuildings(simplifiedBuildings);
+            }
+            
+            // Essayer d'extraire les routes réelles de Cesium
+            const extractedRoads = await extractRoadsFromCesium(
+                cesiumViewer.current,
+                bounds
+            );
+            
+            if (extractedRoads.length > 2) { // Si on a plus que les deux routes par défaut
+                setRoads(extractedRoads);
+                console.log(`Extracted ${extractedRoads.length} roads`);
+            } else {
+                // Si l'extraction a échoué, créer une grille de routes simplifiée
+                console.log('Creating simplified road grid');
+                const simplifiedRoads = generateSimplifiedRoadGrid(bounds, 0.005);
+                setRoads(simplifiedRoads);
+            }
+        } catch (error) {
+            console.error('Error loading buildings and roads:', error);
+            
+            // Fallback à des données simplifiées
+            setBuildings([]);
+            setRoads(generateSimplifiedRoadGrid(bounds, 0.005));
+        }
+    }, [cesiumViewer.current]);
+
+    // Gestion du plan de vol créé - version améliorée
     const handleFlightPlanCreated = React.useCallback((plan: FlightPlan) => {
         setCurrentFlightPlan(plan);
-        visualizeFlightPath(plan);
-        sendFlightPlanToServer(plan);
         
-        // Ajouter un bouton de contrôle pour réinitialiser la simulation
+        // Déterminer le type de mission en fonction du type d'optimisation
+        let newMissionType = MissionType.NORMAL;
+        switch(plan.optimizationType) {
+            case OptimizationType.FASTEST:
+                newMissionType = MissionType.URGENT;
+                break;
+            case OptimizationType.FUEL_EFFICIENT:
+                newMissionType = MissionType.DELIVERY;
+                break;
+            case OptimizationType.SAFE:
+                newMissionType = MissionType.NORMAL;
+                break;
+            case OptimizationType.COMFORTABLE:
+                newMissionType = MissionType.SIGHTSEEING;
+                break;
+            case OptimizationType.AVOID_ZONES:
+                newMissionType = MissionType.NORMAL;
+                break;
+        }
+        setMissionType(newMissionType);
+        
+        // Calculer les limites de la région d'intérêt
+        const bounds = {
+            minLat: Math.min(plan.startPosition.lat, plan.endPosition.lat) - 0.05,
+            maxLat: Math.max(plan.startPosition.lat, plan.endPosition.lat) + 0.05,
+            minLng: Math.min(plan.startPosition.lng, plan.endPosition.lng) - 0.05,
+            maxLng: Math.max(plan.startPosition.lng, plan.endPosition.lng) + 0.05
+        };
+        
+        // Charger les bâtiments et routes pour cette région
+        loadBuildingsAndRoads(bounds).then(() => {
+            // Générer uniquement des obstacles aléatoires dans cette région
+            import('../utils/navigationAlgorithms').then(({ generateTestObstacles }) => {
+                const obstacles = generateTestObstacles(bounds, 3); // Moins d'obstacles aléatoires
+                
+                // Visualiser uniquement les obstacles
+                visualizeObstacles(obstacles);
+                
+                // Visualiser les bâtiments et les routes
+                visualizeBuildingsAndRoads(buildings, roads);
+                
+                // Envoyer les données au serveur
+                if (webSocket && webSocket.readyState === WebSocket.OPEN) {
+                    webSocket.send(JSON.stringify({
+                        type: 'obstacles',
+                        obstacles: [...obstacles, ...convertBuildingsToObstacles(buildings)]
+                    }));
+                    
+                    // Calculer un chemin optimal avec le nouvel algorithme
+                    const startPos: Position = {
+                        lat: plan.startPosition.lat,
+                        lng: plan.startPosition.lng,
+                        alt: plan.minAltitude
+                    };
+                    
+                    const endPos: Position = {
+                        lat: plan.endPosition.lat,
+                        lng: plan.endPosition.lng,
+                        alt: plan.minAltitude
+                    };
+                    
+                    // Utiliser notre nouvel algorithme avancé pour la planification de trajectoire
+                    const optimizedPath = findOptimalPath(
+                        startPos,
+                        endPos,
+                        buildings,
+                        roads,
+                        newMissionType,
+                        obstacles,
+                        [], // Aucune condition météo
+                        0.005,
+                        2000
+                    );
+                    
+                    // Générer le profil d'altitude
+                    const enhancedPath = generateAltitudeProfile(
+                        optimizedPath,
+                        plan.minAltitude,
+                        plan.maxAltitude,
+                        plan.optimizationType
+                    );
+                    
+                    // Mettre à jour le plan avec le chemin optimisé
+                    const updatedPlan = {
+                        ...plan,
+                        waypoints: enhancedPath
+                    };
+                    
+                    // Visualiser le chemin optimisé
+                    visualizeFlightPath(updatedPlan);
+                    
+                    // Envoyer le plan mis à jour au serveur
+                    sendFlightPlanToServer(updatedPlan);
+                }
+            });
+        });
+        
+        // Ajouter les contrôles de simulation
         addSimulationControls();
-    }, [visualizeFlightPath, sendFlightPlanToServer, addSimulationControls]);
+    }, [
+        addSimulationControls, 
+        buildings, 
+        convertBuildingsToObstacles, 
+        generateAltitudeProfile, 
+        loadBuildingsAndRoads, 
+        roads, 
+        sendFlightPlanToServer, 
+        visualizeBuildingsAndRoads, 
+        visualizeFlightPath, 
+        visualizeObstacles, 
+        webSocket
+    ]);
 
     const initializeCesiumJs = React.useCallback(async () => {
         if (cesiumViewer.current !== null) {

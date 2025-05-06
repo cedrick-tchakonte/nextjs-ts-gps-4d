@@ -24,6 +24,9 @@ let yawAngle = 0;
 let pitchAngle = 0;
 let rollAngle = 0;
 
+// Ajouter ces structures de données au début du fichier, avec les autres variables globales
+let obstacles = []; // Liste des zones interdites
+
 wss.on('connection', ws => {
     console.log('Client connected');
     
@@ -50,6 +53,11 @@ wss.on('connection', ws => {
                 
                 console.log(`Flight plan with ${waypoints.length} waypoints loaded`);
             } 
+            else if (data.type === 'obstacles') {
+                // Recevoir et stocker les obstacles
+                console.log(`Received ${data.obstacles.length} obstacles`);
+                obstacles = data.obstacles || [];
+            }
             else if (data.type === 'simulationControl') {
                 if (data.action === 'reset') {
                     // Réinitialiser la simulation
@@ -150,6 +158,7 @@ function simulateDefaultFlight() {
 
 // Simulation de vol suivant une trajectoire planifiée
 function simulatePlannedFlight() {
+    // Vérifier si on est arrivé à destination
     if (currentWaypointIndex >= waypoints.length - 1) {
         // Arrivé au dernier waypoint, ajouter des mouvements pour sembler moins statique
         currentAltitude += ((Math.random() - 0.5) * 5) * simulationSpeed;
@@ -169,44 +178,129 @@ function simulatePlannedFlight() {
     // Si on est assez proche du prochain waypoint, passer au suivant
     if (distance < 0.0002 * simulationSpeed) {
         currentWaypointIndex++;
+        console.log(`Reached waypoint ${currentWaypointIndex} of ${waypoints.length}`);
         return;
     }
     
     // Calculer la direction vers le prochain waypoint avec plus de dynamisme
-    const stepSize = Math.min(0.0005 * simulationSpeed, distance); // Augmenté à 0.0005 (était 0.0003)
+    const stepSize = Math.min(0.0005 * simulationSpeed, distance);
     const ratio = stepSize / distance;
     
-    // Déplacer l'appareil vers le prochain waypoint avec un peu d'aléatoire
-    currentLatitude += distLat * ratio + ((Math.random() - 0.5) * 0.00005) * simulationSpeed;
-    currentLongitude += distLng * ratio + ((Math.random() - 0.5) * 0.00005) * simulationSpeed;
+    // Position prévue après le déplacement
+    const nextLat = currentLatitude + distLat * ratio + ((Math.random() - 0.5) * 0.00005 * turbulence) * simulationSpeed;
+    const nextLng = currentLongitude + distLng * ratio + ((Math.random() - 0.5) * 0.00005 * turbulence) * simulationSpeed;
+    
+    // Sauvegarder la position actuelle pour revenir en arrière si besoin
+    const oldLat = currentLatitude;
+    const oldLng = currentLongitude;
+    const oldAlt = currentAltitude;
+    
+    // Déplacer l'appareil vers le prochain waypoint avec les perturbations
+    currentLatitude = nextLat;
+    currentLongitude = nextLng;
+    
+    // Vérifier si la nouvelle position est dans une zone restreinte
+    if (isInRestrictedZone()) {
+        // Si on entre dans une zone restreinte, reculer et tenter une autre direction
+        console.log('Warning: Approaching restricted zone, adjusting course');
+        
+        // Revenir à la position précédente
+        currentLatitude = oldLat;
+        currentLongitude = oldLng;
+        
+        // Si le type d'optimisation est AVOID_ZONES, tenter de monter pour éviter l'obstacle
+        if (flightMode === 'avoid_zones' && obstacles.some(o => o.maxAltitude !== undefined)) {
+            // Trouver l'altitude maximale des obstacles dans la zone
+            const nearbyObstacles = obstacles.filter(o => 
+                isPointInPolygon({ lat: currentLatitude, lng: currentLongitude }, o.coordinates));
+            
+            if (nearbyObstacles.length > 0) {
+                const maxObstacleAlt = Math.max(...nearbyObstacles
+                    .filter(o => o.maxAltitude !== undefined)
+                    .map(o => o.maxAltitude || 0));
+                
+                // Monter au-dessus de l'obstacle avec une marge de sécurité
+                if (maxObstacleAlt > 0 && maxObstacleAlt < maxAltitude) {
+                    currentAltitude = Math.min(maxAltitude, maxObstacleAlt + 50);
+                    console.log(`Climbing to avoid obstacle: ${currentAltitude}m`);
+                }
+            }
+        } else {
+            // Tenter une direction légèrement différente
+            const angleOffset = Math.random() * Math.PI / 2; // 0-90 degrés
+            const newDistance = distance * 0.5; // Moitié de la distance originale
+            
+            // Calculer une nouvelle direction
+            currentLatitude = oldLat + Math.sin(angleOffset) * newDistance * 0.0001;
+            currentLongitude = oldLng + Math.cos(angleOffset) * newDistance * 0.0001;
+        }
+    }
     
     // Gérer l'altitude en fonction de la phase de vol
     const totalWaypoints = waypoints.length;
     const progress = currentWaypointIndex / totalWaypoints;
     
     if (progress < 0.2) {
-        // Phase de décollage et montée plus rapide
+        // Phase de décollage et montée
         if (!takeoffCompleted) {
             currentAltitude += (10 + Math.random() * 5) * simulationSpeed;
-            if (currentAltitude >= maxAltitude * 0.7) {
+            if (currentAltitude >= nextWaypoint.alt || currentAltitude >= maxAltitude * 0.7) {
                 takeoffCompleted = true;
             }
         } else {
-            // Ajuster l'altitude vers l'altitude maximale
-            const altDiff = maxAltitude - currentAltitude;
-            currentAltitude += (altDiff * 0.1) * simulationSpeed; // Plus rapide (0.1 au lieu de 0.05)
+            // Ajuster progressivement vers l'altitude cible du prochain waypoint
+            const targetAlt = nextWaypoint.alt !== undefined ? nextWaypoint.alt : maxAltitude;
+            const altDiff = targetAlt - currentAltitude;
+            currentAltitude += (altDiff * 0.1) * simulationSpeed;
         }
     } else if (progress > 0.8) {
         // Phase de descente pour l'atterrissage
-        const targetAlt = minAltitude;
+        const targetAlt = nextWaypoint.alt !== undefined ? nextWaypoint.alt : minAltitude;
         const altDiff = targetAlt - currentAltitude;
-        currentAltitude += (altDiff * 0.1) * simulationSpeed; // Plus rapide
+        currentAltitude += (altDiff * 0.1) * simulationSpeed;
     } else {
-        // Phase de croisière - variations d'altitude plus prononcées
-        currentAltitude += ((Math.random() - 0.5) * 10) * simulationSpeed;
+        // Phase de croisière - viser l'altitude du waypoint avec des variations
+        const targetAlt = nextWaypoint.alt !== undefined ? nextWaypoint.alt : 
+                          (waypoints[currentWaypointIndex].alt !== undefined ? 
+                           waypoints[currentWaypointIndex].alt : maxAltitude * 0.8);
         
-        // Conserver l'altitude dans des limites raisonnables
-        if (currentAltitude < maxAltitude * 0.6) currentAltitude = maxAltitude * 0.6;
-        if (currentAltitude > maxAltitude * 1.1) currentAltitude = maxAltitude * 1.1;
+        const altDiff = targetAlt - currentAltitude;
+        currentAltitude += (altDiff * 0.05 + (Math.random() - 0.5) * 10 * turbulence / 5) * simulationSpeed;
+        
+        // Limites d'altitude en fonction du plan de vol
+        if (currentAltitude < minAltitude) currentAltitude = minAltitude;
+        if (currentAltitude > maxAltitude) currentAltitude = maxAltitude;
     }
+}
+
+// Vérifier si un point est à l'intérieur d'un polygone (algorithme ray casting)
+function isPointInPolygon(point, polygon) {
+    let inside = false;
+    for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
+        const intersect = ((polygon[i].lat > point.lat) !== (polygon[j].lat > point.lat)) &&
+            (point.lng < (polygon[j].lng - polygon[i].lng) * (point.lat - polygon[i].lat) / 
+             (polygon[j].lat - polygon[i].lat) + polygon[i].lng);
+        if (intersect) inside = !inside;
+    }
+    return inside;
+}
+
+// Vérifier si la position actuelle est dans une zone restreinte
+function isInRestrictedZone() {
+    const currentPos = { lat: currentLatitude, lng: currentLongitude };
+    
+    for (const obstacle of obstacles) {
+        if (isPointInPolygon(currentPos, obstacle.coordinates)) {
+            // Vérifier aussi les contraintes d'altitude si elles existent
+            const altitudeRestricted = 
+                (obstacle.minAltitude !== undefined && currentAltitude < obstacle.minAltitude) ||
+                (obstacle.maxAltitude !== undefined && currentAltitude > obstacle.maxAltitude);
+            
+            // Si zone complète ou si l'altitude est dans la plage restreinte
+            if (obstacle.type === 'complete' || altitudeRestricted) {
+                return true;
+            }
+        }
+    }
+    return false;
 }
