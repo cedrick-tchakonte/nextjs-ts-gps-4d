@@ -278,9 +278,17 @@ export const CesiumComponent: React.FunctionComponent<{
     // Fonction pour envoyer le plan de vol au serveur WebSocket
     const sendFlightPlanToServer = React.useCallback((flightPlan: FlightPlan) => {
         if (webSocket && webSocket.readyState === WebSocket.OPEN) {
+            // Assurons-nous que chaque waypoint a une altitude
+            const waypointsWithAltitude = flightPlan.waypoints.map(wp => {
+                return {
+                    ...wp,
+                    alt: wp.alt ?? flightPlan.maxAltitude * 0.8 // Utiliser l'altitude spécifiée ou une valeur par défaut
+                };
+            });
+            
             const message = {
                 type: 'flightPlan',
-                waypoints: flightPlan.waypoints,
+                waypoints: waypointsWithAltitude,
                 maxAltitude: flightPlan.maxAltitude,
                 minAltitude: flightPlan.minAltitude
             };

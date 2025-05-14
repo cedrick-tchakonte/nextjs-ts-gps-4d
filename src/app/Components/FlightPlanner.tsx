@@ -106,12 +106,12 @@ const FlightPlanner: React.FC<FlightPlannerProps> = ({ availableLocations, onPla
             if (type === OptimizationType.AVOID_ZONES) {
                 // Ajouter des sinuosités pour éviter certaines zones
                 const sinOffset = Math.sin(ratio * Math.PI * 4) * 0.005;
-                waypoints.push({ lat: lat + sinOffset, lng: lng + sinOffset });
+                waypoints.push({ lat: lat + sinOffset, lng: lng + sinOffset, alt: altitude });
             } else if (type === OptimizationType.COMFORTABLE) {
                 // Trajectoire plus douce
-                waypoints.push({ lat, lng });
+                waypoints.push({ lat, lng, alt: altitude });
             } else {
-                waypoints.push({ lat, lng });
+                waypoints.push({ lat, lng, alt: altitude });
             }
         }
         
