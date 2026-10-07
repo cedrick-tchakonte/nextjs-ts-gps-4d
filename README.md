@@ -1,5 +1,15 @@
+# 4D GPS Navigation for VTOL Aircraft
 
-# Cesium in Next.js 14 (App router) with TypeScript
+ENSTA Paris project with Technoplane: a web interface that plans and displays trajectories for vertical takeoff and landing (VTOL) aircraft on a 3D globe, using 3D mapping and dynamic weather as a fourth dimension.
+
+Built with Next.js, TypeScript and CesiumJS. To run it, create a `.env` file with `NEXT_PUBLIC_CESIUM_TOKEN=<your Cesium ion token>`, then `npm install` and `npm run dev`.
+
+This project started from Hyun Seo's Cesium + Next.js template (MIT license); the template's original notes follow.
+
+---
+
+
+## Template notes: Cesium in Next.js 14 (App router) with TypeScript
 
 ## Blah blah
 You know what to do... `npm install` and `npm run dev` or `npm run build` then `npm run start` - Yarn probably works too...
